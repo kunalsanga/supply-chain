@@ -45,7 +45,7 @@ SupplyChain AI is a comprehensive inventory management system that combines mode
 ### Installation
 
 1. **Clone the repository**
-   ```bash
+```bash
    git clone <repository-url>
    cd supplychain-ai
    ```
@@ -57,9 +57,9 @@ SupplyChain AI is a comprehensive inventory management system that combines mode
    ```
 
 3. **Install Python AI Service Dependencies**
-   ```bash
+```bash
    cd ../backend
-   pip install -r requirements.txt
+pip install -r requirements.txt
    ```
 
 4. **Backend Dependencies** (Maven will download automatically)

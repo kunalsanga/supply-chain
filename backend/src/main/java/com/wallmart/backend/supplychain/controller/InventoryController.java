@@ -9,6 +9,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.InputStream;
 import java.util.List;
@@ -18,6 +20,8 @@ import java.util.Map;
 @RequestMapping("/api/inventory")
 @CrossOrigin(origins = "http://localhost:3000")
 public class InventoryController {
+
+    private static final Logger logger = LoggerFactory.getLogger(InventoryController.class);
 
     @Autowired
     private InventoryCSVParser inventoryCSVParser;
@@ -30,12 +34,42 @@ public class InventoryController {
 
     @PostMapping("/upload")
     public ResponseEntity<String> uploadInventoryCSV(@RequestParam("file") MultipartFile file) {
+        long startTime = System.currentTimeMillis();
+        
         try {
+            logger.info("Starting CSV upload: {} ({} bytes)", file.getOriginalFilename(), file.getSize());
+            
+            // Check file size (max 50MB)
+            if (file.getSize() > 50 * 1024 * 1024) {
+                return ResponseEntity.badRequest().body("❌ File too large. Maximum size is 50MB.");
+            }
+            
+            // Check file type
+            String fileName = file.getOriginalFilename();
+            if (fileName == null || !fileName.toLowerCase().endsWith(".csv")) {
+                return ResponseEntity.badRequest().body("❌ Please upload a CSV file.");
+            }
+            
             InputStream inputStream = file.getInputStream();
+            logger.info("Parsing CSV file...");
+            
             List<InventoryEvent> events = inventoryCSVParser.parseCSV(inputStream);
+            logger.info("Parsed {} events from CSV", events.size());
+            
+            if (events.isEmpty()) {
+                return ResponseEntity.badRequest().body("❌ No valid data found in CSV file.");
+            }
+            
+            logger.info("Saving events to database...");
             inventoryService.saveAll(events);
-            return ResponseEntity.ok("✅ CSV Uploaded and saved successfully!");
+            
+            long endTime = System.currentTimeMillis();
+            logger.info("CSV upload completed in {} ms", endTime - startTime);
+            
+            return ResponseEntity.ok("✅ CSV Uploaded and saved successfully! Processed " + events.size() + " records.");
+            
         } catch (Exception e) {
+            logger.error("CSV upload failed: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().body("❌ Upload failed: " + e.getMessage());
         }
     }

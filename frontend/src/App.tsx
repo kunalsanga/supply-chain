@@ -112,12 +112,17 @@ function App() {
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.get('http://localhost:8080/api/inventory/events');
-      setInventoryEvents(response.data);
-      calculateStats(response.data);
+      const response = await axios.get('http://localhost:8081/api/inventory/events', {
+        timeout: 30000, // 30 second timeout
+      });
+      
+      // Limit the data to prevent browser hanging
+      const limitedData = response.data.slice(0, 500); // Only process first 500 items
+      setInventoryEvents(limitedData);
+      calculateStats(limitedData);
       toast.success('Data refreshed successfully!');
     } catch (err) {
-      setError('Failed to fetch inventory events. Make sure the backend is running on port 8080.');
+      setError('Failed to fetch inventory events. Make sure the backend is running on port 8081.');
       toast.error('Failed to fetch data');
       console.error('Error fetching inventory events:', err);
     } finally {
@@ -127,11 +132,23 @@ function App() {
 
   const fetchPredictions = useCallback(async () => {
     try {
-      const response = await axios.get('http://localhost:8080/api/predict-inventory-status');
-      setPredictions(response.data);
+      const response = await axios.get('http://localhost:8081/api/predict-inventory-status', {
+        timeout: 30000, // 30 second timeout
+      });
+      
+      // Limit the data to prevent browser hanging
+      const limitedData = response.data.slice(0, 100); // Only process first 100 items
+      setPredictions(limitedData);
+      
+      // Update AI insights count
+      setStats(prevStats => ({
+        ...prevStats,
+        aiInsights: limitedData.length
+      }));
       toast.success('AI predictions updated!');
     } catch (err) {
       console.error('Error fetching predictions:', err);
+      toast.error('Failed to fetch AI predictions. The dataset might be too large.');
     }
   }, []);
 
@@ -144,7 +161,7 @@ function App() {
     const totalValue = data.reduce((sum, item) => sum + ((item.inventoryLevel || 0) * (item.price || 0)), 0);
     const revenueForecast = data.reduce((sum, item) => sum + ((item.demandForecast || 0) * (item.price || 0)), 0);
 
-    setStats({
+    setStats(prevStats => ({
       totalProducts: uniqueProducts,
       totalStores: uniqueStores,
       averageInventoryLevel: Math.round(avgInventory),
@@ -153,7 +170,7 @@ function App() {
       totalValue: Math.round(totalValue),
       revenueForecast: Math.round(revenueForecast),
       aiInsights: predictions.length
-    });
+    }));
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -165,7 +182,7 @@ function App() {
 
     setUploadStatus('Uploading...');
     try {
-      const response = await axios.post('http://localhost:8080/api/inventory/upload', formData, {
+      const response = await axios.post('http://localhost:8081/api/inventory/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -188,7 +205,7 @@ function App() {
     setKaggleStatus('Downloading Kaggle dataset... This may take a few minutes.');
     
     try {
-      const response = await axios.post('http://localhost:8080/api/inventory/download-kaggle');
+      const response = await axios.post('http://localhost:8081/api/inventory/download-kaggle');
       if (response.data.success) {
         setKaggleStatus('✅ Kaggle dataset downloaded successfully!');
         toast.success('Kaggle dataset downloaded!');
@@ -214,7 +231,7 @@ function App() {
     setKaggleStatus('Loading Kaggle data into database...');
     
     try {
-      const response = await axios.post('http://localhost:8080/api/inventory/load-kaggle-data');
+      const response = await axios.post('http://localhost:8081/api/inventory/load-kaggle-data');
       if (response.data.success) {
         setKaggleStatus('✅ Kaggle data loaded into database successfully!');
         toast.success('Data loaded successfully!');
@@ -346,7 +363,7 @@ function App() {
             </div>
           </div>
         </div>
-      </header>
+        </header>
 
       {/* Navigation */}
       <nav className="bg-white shadow-sm border-b">
@@ -605,47 +622,62 @@ function App() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {predictions.map((prediction, index) => (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.1 }}
-                    className="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg p-6 border border-gray-200"
-                  >
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-semibold text-gray-900 truncate">{prediction.productName}</h3>
-                      <span className={clsx(
-                        "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
-                        prediction.stockStatus === 'UNDERSTOCKED' ? "bg-red-100 text-red-800" :
-                        prediction.stockStatus === 'OVERSTOCKED' ? "bg-yellow-100 text-yellow-800" :
-                        "bg-green-100 text-green-800"
-                      )}>
-                        {prediction.stockStatus}
-                      </span>
-                    </div>
-                    
-                    <div className="space-y-3">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Current Inventory:</span>
-                        <span className="font-medium">{prediction.currentInventory}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Demand Forecast:</span>
-                        <span className="font-medium">{prediction.demandForecast}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Store:</span>
-                        <span className="font-medium">{prediction.storeId}</span>
+                {predictions.length > 0 ? (
+                  predictions.map((prediction, index) => (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                      className="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg p-6 border border-gray-200"
+                    >
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-semibold text-gray-900 truncate">{prediction.productName}</h3>
+                        <span className={clsx(
+                          "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
+                          prediction.stockStatus === 'UNDERSTOCKED' ? "bg-red-100 text-red-800" :
+                          prediction.stockStatus === 'OVERSTOCKED' ? "bg-yellow-100 text-yellow-800" :
+                          "bg-green-100 text-green-800"
+                        )}>
+                          {prediction.stockStatus}
+                        </span>
                       </div>
                       
-                      <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                        <p className="text-sm text-blue-800 font-medium">AI Recommendation:</p>
-                        <p className="text-sm text-blue-700 mt-1">{prediction.recommendation}</p>
+                      <div className="space-y-3">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Current Inventory:</span>
+                          <span className="font-medium">{prediction.currentInventory}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Demand Forecast:</span>
+                          <span className="font-medium">{prediction.demandForecast}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Store:</span>
+                          <span className="font-medium">{prediction.storeId}</span>
+                        </div>
+                        
+                        <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                          <p className="text-sm text-blue-800 font-medium">AI Recommendation:</p>
+                          <p className="text-sm text-blue-700 mt-1">{prediction.recommendation}</p>
+                        </div>
                       </div>
-                    </div>
-                  </motion.div>
-                ))}
+                    </motion.div>
+                  ))
+                ) : (
+                  <div className="col-span-full text-center py-12">
+                    <Brain className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No AI Predictions Available</h3>
+                    <p className="text-gray-600 mb-4">Upload inventory data to generate AI predictions and recommendations.</p>
+                    <button
+                      onClick={fetchPredictions}
+                      className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                    >
+                      <Brain className="w-4 h-4 inline mr-2" />
+                      Generate Predictions
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>
@@ -727,88 +759,88 @@ function App() {
             animate={{ opacity: 1 }}
             className="space-y-6"
           >
-            {/* Kaggle Dataset Section */}
+        {/* Kaggle Dataset Section */}
             <div className="bg-white rounded-xl shadow-lg p-6">
               <h2 className="text-2xl font-semibold text-gray-900 mb-4">Kaggle Dataset Integration</h2>
-              <div className="flex flex-wrap items-center gap-4 mb-4">
-                <button 
-                  onClick={downloadKaggleDataset}
-                  disabled={downloadingKaggle}
+          <div className="flex flex-wrap items-center gap-4 mb-4">
+            <button 
+              onClick={downloadKaggleDataset}
+              disabled={downloadingKaggle}
                   className={clsx(
                     "flex items-center space-x-2 px-6 py-3 rounded-lg font-medium transition-colors",
-                    downloadingKaggle 
+                downloadingKaggle 
                       ? "bg-gray-400 cursor-not-allowed" 
                       : "bg-green-600 hover:bg-green-700 text-white"
                   )}
-                >
+            >
                   <Download className="w-4 h-4" />
                   <span>{downloadingKaggle ? 'Downloading...' : 'Download Kaggle Dataset'}</span>
-                </button>
-                <button 
-                  onClick={loadKaggleData}
-                  disabled={loadingKaggle}
+            </button>
+            <button 
+              onClick={loadKaggleData}
+              disabled={loadingKaggle}
                   className={clsx(
                     "flex items-center space-x-2 px-6 py-3 rounded-lg font-medium transition-colors",
-                    loadingKaggle 
+                loadingKaggle 
                       ? "bg-gray-400 cursor-not-allowed" 
                       : "bg-blue-600 hover:bg-blue-700 text-white"
                   )}
-                >
+            >
                   <Upload className="w-4 h-4" />
                   <span>{loadingKaggle ? 'Loading...' : 'Load Kaggle Data'}</span>
-                </button>
-                <div className="text-sm text-gray-600">
-                  Downloads real retail inventory data from Kaggle
-                </div>
-              </div>
-              {kaggleStatus && (
+            </button>
+            <div className="text-sm text-gray-600">
+              Downloads real retail inventory data from Kaggle
+            </div>
+          </div>
+          {kaggleStatus && (
                 <div className={clsx(
                   "p-3 rounded-lg",
-                  kaggleStatus.includes('✅') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+              kaggleStatus.includes('✅') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                 )}>
-                  {kaggleStatus}
-                </div>
-              )}
+              {kaggleStatus}
             </div>
+          )}
+        </div>
 
-            {/* File Upload Section */}
+        {/* File Upload Section */}
             <div className="bg-white rounded-xl shadow-lg p-6">
               <h2 className="text-2xl font-semibold text-gray-900 mb-4">Upload Inventory Data</h2>
-              <div className="flex items-center space-x-4">
-                <input
-                  type="file"
-                  accept=".csv"
-                  onChange={handleFileUpload}
-                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                />
-                <div className="text-sm text-gray-600">
-                  Upload a CSV file with inventory data
-                </div>
-              </div>
-              {uploadStatus && (
+          <div className="flex items-center space-x-4">
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleFileUpload}
+              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+            />
+            <div className="text-sm text-gray-600">
+              Upload a CSV file with inventory data
+            </div>
+          </div>
+          {uploadStatus && (
                 <div className={clsx(
                   "mt-4 p-3 rounded-lg",
-                  uploadStatus.includes('✅') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+              uploadStatus.includes('✅') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                 )}>
-                  {uploadStatus}
-                </div>
-              )}
+              {uploadStatus}
             </div>
+          )}
+        </div>
 
             {/* System Status */}
             <div className="bg-white rounded-xl shadow-lg p-6">
               <h2 className="text-2xl font-semibold text-gray-900 mb-4">System Status</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <h3 className="font-semibold text-green-800">Frontend</h3>
-                  <p className="text-green-600">Running on http://localhost:3000</p>
-                </div>
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h3 className="font-semibold text-blue-800">Backend API</h3>
-                  <p className="text-blue-600">Running on http://localhost:8080</p>
-                </div>
-              </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <h3 className="font-semibold text-green-800">Frontend</h3>
+              <p className="text-green-600">Running on http://localhost:3000</p>
             </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h3 className="font-semibold text-blue-800">Backend API</h3>
+                              <p className="text-blue-600">Running on http://localhost:8081</p>
+            </div>
+          </div>
+        </div>
           </motion.div>
         )}
       </main>

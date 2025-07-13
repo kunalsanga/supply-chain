@@ -1,8 +1,8 @@
 package com.wallmart.backend.supplychain.service;
 
 import com.wallmart.backend.supplychain.dto.InventoryPredictionDTO;
-import com.wallmart.backend.supplychain.entity.InventoryLog;
-import com.wallmart.backend.supplychain.repository.InventoryLogRepository;
+import com.wallmart.backend.supplychain.entity.InventoryEvent;
+import com.wallmart.backend.supplychain.repository.InventoryRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
@@ -11,6 +11,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.RestClientException;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -19,7 +20,7 @@ import java.util.stream.Collectors;
 public class AIPredictionService {
 
     @Autowired
-    private InventoryLogRepository inventoryLogRepository;
+    private InventoryRepository inventoryRepository;
 
     @Autowired
     private RestTemplate restTemplate;
@@ -27,36 +28,46 @@ public class AIPredictionService {
     @Value("${ai.service.url:http://localhost:8000}")
     private String aiServiceUrl;
 
+    @Value("${ai.service.timeout:5000}")
+    private int aiServiceTimeout;
+
     public List<InventoryPredictionDTO> predictInventoryStatus() {
         try {
             // Fetch all inventory data from database
-            List<InventoryLog> inventoryData = inventoryLogRepository.findAll();
+            List<InventoryEvent> inventoryData = inventoryRepository.findAll();
             
             if (inventoryData.isEmpty()) {
                 throw new RuntimeException("No inventory data available for prediction");
             }
 
-            // Prepare data for AI service
-            Map<String, Object> requestData = Map.of(
-                "inventory_data", inventoryData
-            );
+            // Try to call AI service with timeout
+            try {
+                // Prepare data for AI service
+                Map<String, Object> requestData = new HashMap<>();
+                requestData.put("inventory_data", inventoryData);
 
-            // Set headers
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
+                // Set headers
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.APPLICATION_JSON);
 
-            // Create request entity
-            HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestData, headers);
+                // Create request entity
+                HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestData, headers);
 
-            // Call AI service
-            ResponseEntity<Map> response = restTemplate.postForEntity(
-                aiServiceUrl + "/predict",
-                request,
-                Map.class
-            );
+                // Call AI service with timeout
+                ResponseEntity<Map> response = restTemplate.postForEntity(
+                    aiServiceUrl + "/predict",
+                    request,
+                    Map.class
+                );
 
-            // Process AI response and convert to DTOs
-            return processAIResponse(response.getBody(), inventoryData);
+                // Process AI response and convert to DTOs
+                return processAIResponse(response.getBody(), inventoryData);
+
+            } catch (RestClientException e) {
+                // AI service is not available, use fallback predictions
+                System.out.println("AI service not available, using fallback predictions: " + e.getMessage());
+                return generateFallbackPredictions(inventoryData);
+            }
 
         } catch (Exception e) {
             throw new RuntimeException("Failed to get AI predictions: " + e.getMessage(), e);
@@ -64,7 +75,7 @@ public class AIPredictionService {
     }
 
     public Map<String, Object> getDashboardStats() {
-        List<InventoryLog> inventoryData = inventoryLogRepository.findAll();
+        List<InventoryEvent> inventoryData = inventoryRepository.findAll();
         
         if (inventoryData.isEmpty()) {
             Map<String, Object> error = new HashMap<>();
@@ -74,42 +85,34 @@ public class AIPredictionService {
 
         // Calculate statistics
         long totalProducts = inventoryData.stream()
-            .map(InventoryLog::getProductId)
+            .map(InventoryEvent::getProductId)
             .distinct()
             .count();
             
         long totalStores = inventoryData.stream()
-            .map(InventoryLog::getStoreId)
+            .map(InventoryEvent::getStoreId)
             .distinct()
             .count();
             
         double avgInventory = inventoryData.stream()
-            .mapToDouble(item -> item.getInventoryLevel() != null ? item.getInventoryLevel() : 0)
+            .mapToDouble(InventoryEvent::getInventoryLevel)
             .average()
             .orElse(0.0);
             
         long lowStockItems = inventoryData.stream()
-            .filter(item -> item.getInventoryLevel() != null && item.getInventoryLevel() < 10)
+            .filter(item -> item.getInventoryLevel() < 10)
             .count();
             
         long overstockedItems = inventoryData.stream()
-            .filter(item -> item.getInventoryLevel() != null && item.getInventoryLevel() > 100)
+            .filter(item -> item.getInventoryLevel() > 100)
             .count();
             
         double totalValue = inventoryData.stream()
-            .mapToDouble(item -> {
-                double inventory = item.getInventoryLevel() != null ? item.getInventoryLevel() : 0;
-                double price = item.getPrice() != null ? item.getPrice() : 0;
-                return inventory * price;
-            })
+            .mapToDouble(item -> item.getInventoryLevel() * item.getPrice())
             .sum();
             
         double revenueForecast = inventoryData.stream()
-            .mapToDouble(item -> {
-                double demand = item.getDemandForecast() != null ? item.getDemandForecast() : 0;
-                double price = item.getPrice() != null ? item.getPrice() : 0;
-                return demand * price;
-            })
+            .mapToDouble(item -> item.getDemandForecast() * item.getPrice())
             .sum();
 
         Map<String, Object> stats = new HashMap<>();
@@ -125,7 +128,7 @@ public class AIPredictionService {
     }
 
     public Map<String, Object> getRevenueForecast() {
-        List<InventoryLog> inventoryData = inventoryLogRepository.findAll();
+        List<InventoryEvent> inventoryData = inventoryRepository.findAll();
         
         if (inventoryData.isEmpty()) {
             Map<String, Object> error = new HashMap<>();
@@ -135,19 +138,11 @@ public class AIPredictionService {
 
         // Calculate revenue metrics
         double totalRevenue = inventoryData.stream()
-            .mapToDouble(item -> {
-                double inventory = item.getInventoryLevel() != null ? item.getInventoryLevel() : 0;
-                double price = item.getPrice() != null ? item.getPrice() : 0;
-                return inventory * price;
-            })
+            .mapToDouble(item -> item.getInventoryLevel() * item.getPrice())
             .sum();
             
         double forecastedRevenue = inventoryData.stream()
-            .mapToDouble(item -> {
-                double demand = item.getDemandForecast() != null ? item.getDemandForecast() : 0;
-                double price = item.getPrice() != null ? item.getPrice() : 0;
-                return demand * price;
-            })
+            .mapToDouble(item -> item.getDemandForecast() * item.getPrice())
             .sum();
             
         double growthRate = totalRevenue > 0 ? ((forecastedRevenue - totalRevenue) / totalRevenue) * 100 : 0;
@@ -161,13 +156,10 @@ public class AIPredictionService {
     }
 
     public List<Map<String, Object>> getStockAlerts() {
-        List<InventoryLog> inventoryData = inventoryLogRepository.findAll();
+        List<InventoryEvent> inventoryData = inventoryRepository.findAll();
         
         return inventoryData.stream()
-            .filter(item -> {
-                if (item.getInventoryLevel() == null) return false;
-                return item.getInventoryLevel() < 10 || item.getInventoryLevel() > 100;
-            })
+            .filter(item -> item.getInventoryLevel() < 10 || item.getInventoryLevel() > 100)
             .map(item -> {
                 String alertType = item.getInventoryLevel() < 10 ? "LOW_STOCK" : "OVERSTOCKED";
                 String severity = item.getInventoryLevel() < 5 ? "CRITICAL" : "WARNING";
@@ -186,7 +178,7 @@ public class AIPredictionService {
     }
 
     public Map<String, Object> getCategoryPerformance() {
-        List<InventoryLog> inventoryData = inventoryLogRepository.findAll();
+        List<InventoryEvent> inventoryData = inventoryRepository.findAll();
         
         if (inventoryData.isEmpty()) {
             Map<String, Object> error = new HashMap<>();
@@ -195,27 +187,23 @@ public class AIPredictionService {
         }
 
         // Group by category and calculate metrics
-        Map<String, List<InventoryLog>> categoryGroups = inventoryData.stream()
-            .collect(Collectors.groupingBy(InventoryLog::getCategory));
+        Map<String, List<InventoryEvent>> categoryGroups = inventoryData.stream()
+            .collect(Collectors.groupingBy(InventoryEvent::getCategory));
             
         Map<String, Object> performance = new HashMap<>();
         
         categoryGroups.forEach((category, items) -> {
             double totalValue = items.stream()
-                .mapToDouble(item -> {
-                    double inventory = item.getInventoryLevel() != null ? item.getInventoryLevel() : 0;
-                    double price = item.getPrice() != null ? item.getPrice() : 0;
-                    return inventory * price;
-                })
+                .mapToDouble(item -> item.getInventoryLevel() * item.getPrice())
                 .sum();
                 
             double avgInventory = items.stream()
-                .mapToDouble(item -> item.getInventoryLevel() != null ? item.getInventoryLevel() : 0)
+                .mapToDouble(InventoryEvent::getInventoryLevel)
                 .average()
                 .orElse(0.0);
                 
             long lowStockCount = items.stream()
-                .filter(item -> item.getInventoryLevel() != null && item.getInventoryLevel() < 10)
+                .filter(item -> item.getInventoryLevel() < 10)
                 .count();
                 
             Map<String, Object> categoryStats = new HashMap<>();
@@ -233,7 +221,7 @@ public class AIPredictionService {
         try {
             // Prepare optimization request for AI service
             Map<String, Object> optimizationRequest = new HashMap<>();
-            optimizationRequest.put("inventory_data", inventoryLogRepository.findAll());
+            optimizationRequest.put("inventory_data", inventoryRepository.findAll());
             optimizationRequest.put("optimization_target", request.getOrDefault("target", "cost"));
             optimizationRequest.put("constraints", request.getOrDefault("constraints", new HashMap<>()));
 
@@ -283,55 +271,54 @@ public class AIPredictionService {
         }
     }
 
-    private List<InventoryPredictionDTO> processAIResponse(Map response, List<InventoryLog> inventoryData) {
+    private List<InventoryPredictionDTO> processAIResponse(Map response, List<InventoryEvent> inventoryData) {
         // This is a simplified implementation
         // In a real scenario, you would parse the AI service response
         // and map it to your DTOs
         
         return inventoryData.stream()
             .map(this::createPredictionDTO)
-            .toList();
+            .collect(Collectors.toList());
     }
 
-    private InventoryPredictionDTO createPredictionDTO(InventoryLog inventoryLog) {
+    private List<InventoryPredictionDTO> generateFallbackPredictions(List<InventoryEvent> inventoryData) {
+        return inventoryData.stream()
+            .map(this::createPredictionDTO)
+            .collect(Collectors.toList());
+    }
+
+    private InventoryPredictionDTO createPredictionDTO(InventoryEvent inventoryEvent) {
         // Simple logic to determine stock status based on inventory level
-        String stockStatus = determineStockStatus(inventoryLog);
-        Boolean expectedDemandIncrease = determineDemandIncrease(inventoryLog);
+        String stockStatus = determineStockStatus(inventoryEvent);
+        Boolean expectedDemandIncrease = determineDemandIncrease(inventoryEvent);
 
         return InventoryPredictionDTO.builder()
-            .productId(inventoryLog.getProductId())
-            .productName(inventoryLog.getProductName())
-            .storeId(inventoryLog.getStoreId())
-            .category(inventoryLog.getCategory())
-            .currentInventory(inventoryLog.getInventoryLevel())
+            .productId(inventoryEvent.getProductId())
+            .productName(inventoryEvent.getProductName())
+            .storeId(inventoryEvent.getStoreId())
+            .category(inventoryEvent.getCategory())
+            .currentInventory(inventoryEvent.getInventoryLevel())
             .stockStatus(stockStatus)
             .expectedDemandIncrease(expectedDemandIncrease)
-            .demandForecast(inventoryLog.getDemandForecast())
+            .demandForecast(inventoryEvent.getDemandForecast())
             .recommendation(generateRecommendation(stockStatus, expectedDemandIncrease))
             .build();
     }
 
-    private String determineStockStatus(InventoryLog inventoryLog) {
-        if (inventoryLog.getInventoryLevel() == null) {
-            return "NORMAL";
-        }
-        
+    private String determineStockStatus(InventoryEvent inventoryEvent) {
         // Simple logic: if inventory is low relative to demand forecast
-        if (inventoryLog.getDemandForecast() != null && inventoryLog.getInventoryLevel() < inventoryLog.getDemandForecast() * 0.5) {
+        if (inventoryEvent.getInventoryLevel() < inventoryEvent.getDemandForecast() * 0.5) {
             return "UNDERSTOCKED";
-        } else if (inventoryLog.getInventoryLevel() > 100) { // Arbitrary threshold
+        } else if (inventoryEvent.getInventoryLevel() > 100) { // Arbitrary threshold
             return "OVERSTOCKED";
         } else {
             return "NORMAL";
         }
     }
 
-    private Boolean determineDemandIncrease(InventoryLog inventoryLog) {
+    private Boolean determineDemandIncrease(InventoryEvent inventoryEvent) {
         // Simple logic: if demand forecast is higher than current inventory
-        if (inventoryLog.getDemandForecast() != null && inventoryLog.getInventoryLevel() != null) {
-            return inventoryLog.getDemandForecast() > inventoryLog.getInventoryLevel();
-        }
-        return false;
+        return inventoryEvent.getDemandForecast() > inventoryEvent.getInventoryLevel();
     }
 
     private String generateRecommendation(String stockStatus, Boolean expectedDemandIncrease) {
@@ -346,7 +333,7 @@ public class AIPredictionService {
         }
     }
 
-    private String generateStockAlertRecommendation(String alertType, InventoryLog item) {
+    private String generateStockAlertRecommendation(String alertType, InventoryEvent item) {
         if ("LOW_STOCK".equals(alertType)) {
             return "Urgent: Reorder " + item.getProductName() + " immediately. Current stock: " + item.getInventoryLevel();
         } else {

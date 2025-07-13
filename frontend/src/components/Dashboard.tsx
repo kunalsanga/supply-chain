@@ -56,7 +56,7 @@ const Dashboard: React.FC = () => {
   const fetchInventory = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('http://localhost:8080/api/inventory/events');
+      const response = await axios.get('http://localhost:8081/api/inventory/events');
       setInventory(response.data);
       setError(null);
     } catch (err) {
@@ -70,7 +70,7 @@ const Dashboard: React.FC = () => {
   const downloadKaggleData = async () => {
     try {
       setKaggleLoading(true);
-      const response = await axios.post('http://localhost:8080/api/inventory/download-kaggle');
+      const response = await axios.post('http://localhost:8081/api/inventory/download-kaggle');
       if (response.data.success) {
         setError(null);
         // Refresh inventory after successful download
@@ -89,7 +89,7 @@ const Dashboard: React.FC = () => {
   const loadKaggleData = async () => {
     try {
       setKaggleLoading(true);
-      const response = await axios.post('http://localhost:8080/api/inventory/load-kaggle-data');
+      const response = await axios.post('http://localhost:8081/api/inventory/load-kaggle-data');
       if (response.data.success) {
         setError(null);
         // Refresh inventory after successful load
@@ -153,7 +153,7 @@ const Dashboard: React.FC = () => {
       setPredictionLoading(true);
       const selectedInventory = inventory.filter(item => selectedItems.includes(item.id));
       
-      const response = await axios.post('http://localhost:8080/api/ml/predict', {
+      const response = await axios.post('http://localhost:8081/api/ml/predict', {
         inventory: selectedInventory
       });
       
