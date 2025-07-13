@@ -15,6 +15,7 @@ import org.springframework.web.client.RestClientException;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 public class AIPredictionService {
@@ -33,18 +34,23 @@ public class AIPredictionService {
 
     public List<InventoryPredictionDTO> predictInventoryStatus() {
         try {
-            // Fetch all inventory data from database
-            List<InventoryEvent> inventoryData = inventoryRepository.findAll();
+            // Fetch limited inventory data from database to prevent large requests
+            List<InventoryEvent> allInventoryData = inventoryRepository.findAll();
             
-            if (inventoryData.isEmpty()) {
+            if (allInventoryData.isEmpty()) {
                 throw new RuntimeException("No inventory data available for prediction");
             }
+
+            // Limit data sent to AI service to prevent timeout/large request issues
+            List<InventoryEvent> limitedInventoryData = allInventoryData.stream()
+                .limit(100) // Only send first 100 items to AI service
+                .collect(Collectors.toList());
 
             // Try to call AI service with timeout
             try {
                 // Prepare data for AI service
                 Map<String, Object> requestData = new HashMap<>();
-                requestData.put("inventory_data", inventoryData);
+                requestData.put("inventory_data", limitedInventoryData);
 
                 // Set headers
                 HttpHeaders headers = new HttpHeaders();
@@ -61,12 +67,12 @@ public class AIPredictionService {
                 );
 
                 // Process AI response and convert to DTOs
-                return processAIResponse(response.getBody(), inventoryData);
+                return processAIResponse(response.getBody(), allInventoryData);
 
             } catch (RestClientException e) {
                 // AI service is not available, use fallback predictions
                 System.out.println("AI service not available, using fallback predictions: " + e.getMessage());
-                return generateFallbackPredictions(inventoryData);
+                return generateFallbackPredictions(allInventoryData);
             }
 
         } catch (Exception e) {

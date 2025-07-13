@@ -107,6 +107,9 @@ function App() {
   const [loadingKaggle, setLoadingKaggle] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [realTimeMode, setRealTimeMode] = useState(false);
+  const [dataVersion, setDataVersion] = useState(0); // Track data updates
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [inventoryTrendData, setInventoryTrendData] = useState<any[]>([]);
 
   const fetchInventoryEvents = useCallback(async () => {
     setLoading(true);
@@ -119,7 +122,8 @@ function App() {
       // Limit the data to prevent browser hanging
       const limitedData = response.data.slice(0, 500); // Only process first 500 items
       setInventoryEvents(limitedData);
-      calculateStats(limitedData);
+      calculateStats(limitedData, predictions.length);
+      updateChartData(limitedData); // Update chart data
       toast.success('Data refreshed successfully!');
     } catch (err) {
       setError('Failed to fetch inventory events. Make sure the backend is running on port 8081.');
@@ -133,26 +137,40 @@ function App() {
   const fetchPredictions = useCallback(async () => {
     try {
       const response = await axios.get('http://localhost:8081/api/predict-inventory-status', {
-        timeout: 30000, // 30 second timeout
+        timeout: 60000, // 60 second timeout for AI predictions
       });
       
       // Limit the data to prevent browser hanging
       const limitedData = response.data.slice(0, 100); // Only process first 100 items
       setPredictions(limitedData);
       
-      // Update AI insights count
-      setStats(prevStats => ({
-        ...prevStats,
-        aiInsights: limitedData.length
-      }));
+      // Update stats with new prediction count
+      calculateStats(inventoryEvents, limitedData.length);
       toast.success('AI predictions updated!');
     } catch (err) {
       console.error('Error fetching predictions:', err);
-      toast.error('Failed to fetch AI predictions. The dataset might be too large.');
+      // Don't show error toast, just log the error
+      // AI predictions might fail but inventory data should still work
+      setPredictions([]); // Clear predictions
+      calculateStats(inventoryEvents, 0); // Update stats with 0 predictions
     }
   }, []);
 
-  const calculateStats = (data: InventoryEvent[]) => {
+  const calculateStats = useCallback((data: InventoryEvent[], predictionCount: number = 0) => {
+    if (data.length === 0) {
+      setStats({
+        totalProducts: 0,
+        totalStores: 0,
+        averageInventoryLevel: 0,
+        lowStockItems: 0,
+        overstockedItems: 0,
+        totalValue: 0,
+        revenueForecast: 0,
+        aiInsights: predictionCount
+      });
+      return;
+    }
+
     const uniqueProducts = new Set(data.map(item => item.productId)).size;
     const uniqueStores = new Set(data.map(item => item.storeId)).size;
     const avgInventory = data.reduce((sum, item) => sum + (item.inventoryLevel || 0), 0) / data.length;
@@ -161,7 +179,7 @@ function App() {
     const totalValue = data.reduce((sum, item) => sum + ((item.inventoryLevel || 0) * (item.price || 0)), 0);
     const revenueForecast = data.reduce((sum, item) => sum + ((item.demandForecast || 0) * (item.price || 0)), 0);
 
-    setStats(prevStats => ({
+    setStats({
       totalProducts: uniqueProducts,
       totalStores: uniqueStores,
       averageInventoryLevel: Math.round(avgInventory),
@@ -169,9 +187,69 @@ function App() {
       overstockedItems: overstocked,
       totalValue: Math.round(totalValue),
       revenueForecast: Math.round(revenueForecast),
-      aiInsights: predictions.length
+      aiInsights: predictionCount
+    });
+  }, []);
+
+  const updateChartData = useCallback((data: InventoryEvent[]) => {
+    // Update category distribution chart
+    const categoryData = data.reduce((acc, item) => {
+      acc[item.category] = (acc[item.category] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const newChartData = Object.entries(categoryData).map(([category, count]) => ({
+      category,
+      count
     }));
-  };
+    setChartData(newChartData);
+
+    // Update inventory trend chart
+    const newInventoryTrendData = data
+      .slice(-10)
+      .map((item, index) => ({
+        name: `Item ${index + 1}`,
+        inventory: item.inventoryLevel || 0,
+        demand: item.demandForecast || 0
+      }));
+    setInventoryTrendData(newInventoryTrendData);
+  }, []);
+
+  const refreshAllData = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Fetch fresh inventory data
+      const inventoryResponse = await axios.get('http://localhost:8081/api/inventory/events', {
+        timeout: 30000,
+      });
+      const limitedInventoryData = inventoryResponse.data.slice(0, 500);
+      setInventoryEvents(limitedInventoryData);
+
+      // Try to fetch fresh predictions (but don't fail if it doesn't work)
+      let limitedPredictionsData = [];
+      try {
+        const predictionsResponse = await axios.get('http://localhost:8081/api/predict-inventory-status', {
+          timeout: 60000, // Longer timeout for AI predictions
+        });
+        limitedPredictionsData = predictionsResponse.data.slice(0, 100);
+        setPredictions(limitedPredictionsData);
+      } catch (predictionErr) {
+        console.error('AI predictions failed, but continuing with inventory data:', predictionErr);
+        setPredictions([]); // Clear predictions
+      }
+
+      // Update stats and charts with fresh data
+      calculateStats(limitedInventoryData, limitedPredictionsData.length);
+      updateChartData(limitedInventoryData);
+
+      toast.success('Data refreshed successfully!');
+    } catch (err) {
+      console.error('Error refreshing data:', err);
+      toast.error('Failed to refresh data');
+    } finally {
+      setLoading(false);
+    }
+  }, [calculateStats, updateChartData]);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -190,7 +268,8 @@ function App() {
       setUploadStatus('✅ ' + response.data);
       toast.success('File uploaded successfully!');
       setTimeout(() => {
-        fetchInventoryEvents();
+        setDataVersion(prev => prev + 1); // Force refresh
+        refreshAllData(); // Comprehensive refresh
         setUploadStatus(null);
       }, 2000);
     } catch (err) {
@@ -210,7 +289,8 @@ function App() {
         setKaggleStatus('✅ Kaggle dataset downloaded successfully!');
         toast.success('Kaggle dataset downloaded!');
         setTimeout(() => {
-          fetchInventoryEvents();
+          setDataVersion(prev => prev + 1); // Force refresh
+          refreshAllData(); // Comprehensive refresh
           setKaggleStatus(null);
         }, 3000);
       } else {
@@ -236,7 +316,8 @@ function App() {
         setKaggleStatus('✅ Kaggle data loaded into database successfully!');
         toast.success('Data loaded successfully!');
         setTimeout(() => {
-          fetchInventoryEvents();
+          setDataVersion(prev => prev + 1); // Force refresh
+          refreshAllData(); // Comprehensive refresh
           setKaggleStatus(null);
         }, 2000);
       } else {
@@ -255,7 +336,9 @@ function App() {
   useEffect(() => {
     fetchInventoryEvents();
     fetchPredictions();
-  }, [fetchInventoryEvents, fetchPredictions]);
+  }, [fetchInventoryEvents, fetchPredictions, dataVersion]);
+
+  // Chart data is updated directly in fetchInventoryEvents
 
   // Real-time updates
   useEffect(() => {
@@ -268,24 +351,7 @@ function App() {
     }
   }, [realTimeMode, fetchInventoryEvents, fetchPredictions]);
 
-  // Prepare chart data
-  const categoryData = inventoryEvents.reduce((acc, item) => {
-    acc[item.category] = (acc[item.category] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  const chartData = Object.entries(categoryData).map(([category, count]) => ({
-    category,
-    count
-  }));
-
-  const inventoryTrendData = inventoryEvents
-    .slice(-10)
-    .map((item, index) => ({
-      name: `Item ${index + 1}`,
-      inventory: item.inventoryLevel || 0,
-      demand: item.demandForecast || 0
-    }));
+  // Chart data is now managed by state and updated when data changes
 
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
@@ -353,7 +419,7 @@ function App() {
               </button>
               
               <button
-                onClick={fetchInventoryEvents}
+                onClick={refreshAllData}
                 disabled={loading}
                 className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
               >
@@ -403,6 +469,12 @@ function App() {
           >
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {loading && (
+                <div className="col-span-4 flex items-center justify-center py-4">
+                  <RefreshCw className="w-6 h-6 animate-spin text-blue-600 mr-2" />
+                  <span className="text-blue-600 font-medium">Updating data...</span>
+                </div>
+              )}
               <StatCard
                 title="Total Products"
                 value={stats.totalProducts}
@@ -437,7 +509,10 @@ function App() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* Category Distribution */}
               <div className="bg-white rounded-xl shadow-lg p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Category Distribution</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Category Distribution</h3>
+                  {loading && <RefreshCw className="w-4 h-4 animate-spin text-blue-600" />}
+                </div>
                 <ResponsiveContainer width="100%" height={300}>
                   <RechartsPieChart>
                     <Pie
@@ -461,7 +536,10 @@ function App() {
 
               {/* Inventory vs Demand Trend */}
               <div className="bg-white rounded-xl shadow-lg p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Inventory vs Demand Trend</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Inventory vs Demand Trend</h3>
+                  {loading && <RefreshCw className="w-4 h-4 animate-spin text-blue-600" />}
+                </div>
                 <ResponsiveContainer width="100%" height={300}>
                   <RechartsLineChart data={inventoryTrendData}>
                     <CartesianGrid strokeDasharray="3 3" />

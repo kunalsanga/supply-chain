@@ -58,10 +58,10 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
   return (
     <div className="bg-white rounded-lg shadow overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
+        <table className="min-w-full divide-y divide-gray-200 text-xs sm:text-sm md:text-base">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-2 sm:px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <input
                   type="checkbox"
                   checked={selectedItems.length === inventory.length && inventory.length > 0}
@@ -72,54 +72,24 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                       inventory.forEach(item => onItemSelect(item.id));
                     }
                   }}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 transition-colors duration-150"
                 />
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Date
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Store ID
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Product ID
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Category
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Region
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Inventory Level
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Units Sold
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Units Ordered
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Demand Forecast
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Price
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Discount
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Weather
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Holiday/Promotion
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Competitor Pricing
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Seasonality
-              </th>
+              <th className="px-2 sm:px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+              <th className="px-2 sm:px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Store ID</th>
+              <th className="px-2 sm:px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product ID</th>
+              <th className="px-2 sm:px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+              <th className="px-2 sm:px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Region</th>
+              <th className="px-2 sm:px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Inventory Level</th>
+              <th className="px-2 sm:px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Units Sold</th>
+              <th className="px-2 sm:px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Units Ordered</th>
+              <th className="px-2 sm:px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Demand Forecast</th>
+              <th className="px-2 sm:px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+              <th className="px-2 sm:px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Discount</th>
+              <th className="px-2 sm:px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Weather</th>
+              <th className="px-2 sm:px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Holiday/Promotion</th>
+              <th className="px-2 sm:px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Competitor Pricing</th>
+              <th className="px-2 sm:px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Seasonality</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -130,65 +100,65 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
               return (
                 <tr
                   key={item.id}
-                  className={`hover:bg-gray-50 cursor-pointer ${
-                    isSelected ? 'bg-blue-50' : ''
+                  className={`hover:bg-blue-50 cursor-pointer transition-colors duration-150 ${
+                    isSelected ? 'bg-blue-100' : ''
                   }`}
                   onClick={() => onItemSelect(item.id)}
                 >
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-2 sm:px-4 md:px-6 py-4 whitespace-nowrap">
                     <input
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => onItemSelect(item.id)}
                       onClick={(e) => e.stopPropagation()}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 transition-colors duration-150"
                     />
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-2 sm:px-4 md:px-6 py-4 whitespace-nowrap text-xs sm:text-sm md:text-base text-gray-900 truncate">
                     {formatDate(item.date)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-2 sm:px-4 md:px-6 py-4 whitespace-nowrap text-xs sm:text-sm md:text-base text-gray-900 truncate">
                     {item.storeId}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                  <td className="px-2 sm:px-4 md:px-6 py-4 whitespace-nowrap text-xs sm:text-sm md:text-base font-medium text-gray-900 truncate">
                     {item.productId}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-2 sm:px-4 md:px-6 py-4 whitespace-nowrap text-xs sm:text-sm md:text-base text-gray-900 truncate">
                     {item.category}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-2 sm:px-4 md:px-6 py-4 whitespace-nowrap text-xs sm:text-sm md:text-base text-gray-900 truncate">
                     {item.region}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-2 sm:px-4 md:px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${inventoryStatus.color}`}>
                       {item.inventoryLevel} ({inventoryStatus.text})
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-2 sm:px-4 md:px-6 py-4 whitespace-nowrap text-xs sm:text-sm md:text-base text-gray-900">
                     {item.unitsSold}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-2 sm:px-4 md:px-6 py-4 whitespace-nowrap text-xs sm:text-sm md:text-base text-gray-900">
                     {item.unitsOrdered}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-2 sm:px-4 md:px-6 py-4 whitespace-nowrap text-xs sm:text-sm md:text-base text-gray-900">
                     {item.demandForecast}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-2 sm:px-4 md:px-6 py-4 whitespace-nowrap text-xs sm:text-sm md:text-base text-gray-900">
                     {formatCurrency(item.price)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-2 sm:px-4 md:px-6 py-4 whitespace-nowrap text-xs sm:text-sm md:text-base text-gray-900">
                     {item.discount}%
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-2 sm:px-4 md:px-6 py-4 whitespace-nowrap text-xs sm:text-sm md:text-base text-gray-900 truncate">
                     {item.weatherCondition}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-2 sm:px-4 md:px-6 py-4 whitespace-nowrap text-xs sm:text-sm md:text-base text-gray-900 truncate">
                     {item.holidayPromotion || 'None'}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-2 sm:px-4 md:px-6 py-4 whitespace-nowrap text-xs sm:text-sm md:text-base text-gray-900">
                     {formatCurrency(item.competitorPricing)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-2 sm:px-4 md:px-6 py-4 whitespace-nowrap text-xs sm:text-sm md:text-base text-gray-900 truncate">
                     {item.seasonality}
                   </td>
                 </tr>
