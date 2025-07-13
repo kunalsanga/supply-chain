@@ -12,8 +12,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class AIPredictionService {
@@ -60,6 +60,226 @@ public class AIPredictionService {
 
         } catch (Exception e) {
             throw new RuntimeException("Failed to get AI predictions: " + e.getMessage(), e);
+        }
+    }
+
+    public Map<String, Object> getDashboardStats() {
+        List<InventoryLog> inventoryData = inventoryLogRepository.findAll();
+        
+        if (inventoryData.isEmpty()) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "No data available");
+            return error;
+        }
+
+        // Calculate statistics
+        long totalProducts = inventoryData.stream()
+            .map(InventoryLog::getProductId)
+            .distinct()
+            .count();
+            
+        long totalStores = inventoryData.stream()
+            .map(InventoryLog::getStoreId)
+            .distinct()
+            .count();
+            
+        double avgInventory = inventoryData.stream()
+            .mapToDouble(item -> item.getInventoryLevel() != null ? item.getInventoryLevel() : 0)
+            .average()
+            .orElse(0.0);
+            
+        long lowStockItems = inventoryData.stream()
+            .filter(item -> item.getInventoryLevel() != null && item.getInventoryLevel() < 10)
+            .count();
+            
+        long overstockedItems = inventoryData.stream()
+            .filter(item -> item.getInventoryLevel() != null && item.getInventoryLevel() > 100)
+            .count();
+            
+        double totalValue = inventoryData.stream()
+            .mapToDouble(item -> {
+                double inventory = item.getInventoryLevel() != null ? item.getInventoryLevel() : 0;
+                double price = item.getPrice() != null ? item.getPrice() : 0;
+                return inventory * price;
+            })
+            .sum();
+            
+        double revenueForecast = inventoryData.stream()
+            .mapToDouble(item -> {
+                double demand = item.getDemandForecast() != null ? item.getDemandForecast() : 0;
+                double price = item.getPrice() != null ? item.getPrice() : 0;
+                return demand * price;
+            })
+            .sum();
+
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("totalProducts", totalProducts);
+        stats.put("totalStores", totalStores);
+        stats.put("averageInventoryLevel", Math.round(avgInventory));
+        stats.put("lowStockItems", lowStockItems);
+        stats.put("overstockedItems", overstockedItems);
+        stats.put("totalValue", Math.round(totalValue));
+        stats.put("revenueForecast", Math.round(revenueForecast));
+        stats.put("aiInsights", inventoryData.size());
+        return stats;
+    }
+
+    public Map<String, Object> getRevenueForecast() {
+        List<InventoryLog> inventoryData = inventoryLogRepository.findAll();
+        
+        if (inventoryData.isEmpty()) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "No data available");
+            return error;
+        }
+
+        // Calculate revenue metrics
+        double totalRevenue = inventoryData.stream()
+            .mapToDouble(item -> {
+                double inventory = item.getInventoryLevel() != null ? item.getInventoryLevel() : 0;
+                double price = item.getPrice() != null ? item.getPrice() : 0;
+                return inventory * price;
+            })
+            .sum();
+            
+        double forecastedRevenue = inventoryData.stream()
+            .mapToDouble(item -> {
+                double demand = item.getDemandForecast() != null ? item.getDemandForecast() : 0;
+                double price = item.getPrice() != null ? item.getPrice() : 0;
+                return demand * price;
+            })
+            .sum();
+            
+        double growthRate = totalRevenue > 0 ? ((forecastedRevenue - totalRevenue) / totalRevenue) * 100 : 0;
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("currentRevenue", Math.round(totalRevenue));
+        result.put("forecastedRevenue", Math.round(forecastedRevenue));
+        result.put("growthRate", Math.round(growthRate * 100.0) / 100.0);
+        result.put("currency", "USD");
+        return result;
+    }
+
+    public List<Map<String, Object>> getStockAlerts() {
+        List<InventoryLog> inventoryData = inventoryLogRepository.findAll();
+        
+        return inventoryData.stream()
+            .filter(item -> {
+                if (item.getInventoryLevel() == null) return false;
+                return item.getInventoryLevel() < 10 || item.getInventoryLevel() > 100;
+            })
+            .map(item -> {
+                String alertType = item.getInventoryLevel() < 10 ? "LOW_STOCK" : "OVERSTOCKED";
+                String severity = item.getInventoryLevel() < 5 ? "CRITICAL" : "WARNING";
+                
+                Map<String, Object> alert = new HashMap<>();
+                alert.put("productId", item.getProductId());
+                alert.put("productName", item.getProductName());
+                alert.put("storeId", item.getStoreId());
+                alert.put("currentLevel", item.getInventoryLevel());
+                alert.put("alertType", alertType);
+                alert.put("severity", severity);
+                alert.put("recommendation", generateStockAlertRecommendation(alertType, item));
+                return alert;
+            })
+            .collect(Collectors.toList());
+    }
+
+    public Map<String, Object> getCategoryPerformance() {
+        List<InventoryLog> inventoryData = inventoryLogRepository.findAll();
+        
+        if (inventoryData.isEmpty()) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "No data available");
+            return error;
+        }
+
+        // Group by category and calculate metrics
+        Map<String, List<InventoryLog>> categoryGroups = inventoryData.stream()
+            .collect(Collectors.groupingBy(InventoryLog::getCategory));
+            
+        Map<String, Object> performance = new HashMap<>();
+        
+        categoryGroups.forEach((category, items) -> {
+            double totalValue = items.stream()
+                .mapToDouble(item -> {
+                    double inventory = item.getInventoryLevel() != null ? item.getInventoryLevel() : 0;
+                    double price = item.getPrice() != null ? item.getPrice() : 0;
+                    return inventory * price;
+                })
+                .sum();
+                
+            double avgInventory = items.stream()
+                .mapToDouble(item -> item.getInventoryLevel() != null ? item.getInventoryLevel() : 0)
+                .average()
+                .orElse(0.0);
+                
+            long lowStockCount = items.stream()
+                .filter(item -> item.getInventoryLevel() != null && item.getInventoryLevel() < 10)
+                .count();
+                
+            Map<String, Object> categoryStats = new HashMap<>();
+            categoryStats.put("totalValue", Math.round(totalValue));
+            categoryStats.put("averageInventory", Math.round(avgInventory));
+            categoryStats.put("lowStockItems", lowStockCount);
+            categoryStats.put("itemCount", items.size());
+            performance.put(category, categoryStats);
+        });
+
+        return performance;
+    }
+
+    public Map<String, Object> optimizeInventory(Map<String, Object> request) {
+        try {
+            // Prepare optimization request for AI service
+            Map<String, Object> optimizationRequest = new HashMap<>();
+            optimizationRequest.put("inventory_data", inventoryLogRepository.findAll());
+            optimizationRequest.put("optimization_target", request.getOrDefault("target", "cost"));
+            optimizationRequest.put("constraints", request.getOrDefault("constraints", new HashMap<>()));
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<Map<String, Object>> httpRequest = new HttpEntity<>(optimizationRequest, headers);
+
+            ResponseEntity<Map> response = restTemplate.postForEntity(
+                aiServiceUrl + "/optimize",
+                httpRequest,
+                Map.class
+            );
+
+            if (response.getBody() != null) {
+                return response.getBody();
+            } else {
+                Map<String, Object> error = new HashMap<>();
+                error.put("error", "No response from AI service");
+                return error;
+            }
+
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "Optimization failed: " + e.getMessage());
+            return error;
+        }
+    }
+
+    public Map<String, Object> checkAIServiceHealth() {
+        try {
+            ResponseEntity<Map> response = restTemplate.getForEntity(
+                aiServiceUrl + "/health",
+                Map.class
+            );
+            
+            Map<String, Object> health = new HashMap<>();
+            health.put("status", "healthy");
+            health.put("aiServiceUrl", aiServiceUrl);
+            health.put("response", response.getBody());
+            return health;
+        } catch (Exception e) {
+            Map<String, Object> health = new HashMap<>();
+            health.put("status", "unhealthy");
+            health.put("aiServiceUrl", aiServiceUrl);
+            health.put("error", e.getMessage());
+            return health;
         }
     }
 
@@ -123,6 +343,14 @@ public class AIPredictionService {
             return "Monitor demand trends and prepare for increased orders";
         } else {
             return "Maintain current inventory levels";
+        }
+    }
+
+    private String generateStockAlertRecommendation(String alertType, InventoryLog item) {
+        if ("LOW_STOCK".equals(alertType)) {
+            return "Urgent: Reorder " + item.getProductName() + " immediately. Current stock: " + item.getInventoryLevel();
+        } else {
+            return "Consider promotional activities for " + item.getProductName() + ". Current stock: " + item.getInventoryLevel();
         }
     }
 } 
