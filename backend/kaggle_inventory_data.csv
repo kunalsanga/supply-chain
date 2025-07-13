@@ -1,0 +1,11 @@
+eventType,productName,quantity,timestamp,location
+IN,Product_0,1,2024-01-01,Warehouse A
+IN,Product_1,1,2024-01-01,Warehouse A
+IN,Product_2,1,2024-01-01,Warehouse A
+IN,Product_3,1,2024-01-01,Warehouse A
+IN,Product_4,1,2024-01-01,Warehouse A
+IN,Product_5,1,2024-01-01,Warehouse A
+IN,Product_6,1,2024-01-01,Warehouse A
+IN,Product_7,1,2024-01-01,Warehouse A
+IN,Product_8,1,2024-01-01,Warehouse A
+IN,Product_9,1,2024-01-01,Warehouse A
