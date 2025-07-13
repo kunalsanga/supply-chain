@@ -67,6 +67,22 @@ public class InventoryController {
         }
     }
 
+    @PostMapping("/load-kaggle-data")
+    public ResponseEntity<Map<String, Object>> loadKaggleDataIntoDatabase() {
+        try {
+            kaggleDataService.loadKaggleDataIntoDatabase();
+            return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Kaggle data loaded into database successfully"
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "success", false,
+                "error", "Failed to load Kaggle data: " + e.getMessage()
+            ));
+        }
+    }
+
     @GetMapping("/kaggle-status")
     public ResponseEntity<Map<String, Object>> getKaggleStatus() {
         boolean isAvailable = kaggleDataService.isKaggleDataAvailable();

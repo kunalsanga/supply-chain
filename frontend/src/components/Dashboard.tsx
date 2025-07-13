@@ -43,6 +43,7 @@ const Dashboard: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRegion, setFilterRegion] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
+  const [kaggleLoading, setKaggleLoading] = useState(false);
 
   useEffect(() => {
     fetchInventory();
@@ -55,7 +56,7 @@ const Dashboard: React.FC = () => {
   const fetchInventory = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('http://localhost:8080/api/dashboard/inventory');
+      const response = await axios.get('http://localhost:8080/api/inventory/events');
       setInventory(response.data);
       setError(null);
     } catch (err) {
@@ -63,6 +64,44 @@ const Dashboard: React.FC = () => {
       console.error('Error fetching inventory:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const downloadKaggleData = async () => {
+    try {
+      setKaggleLoading(true);
+      const response = await axios.post('http://localhost:8080/api/inventory/download-kaggle');
+      if (response.data.success) {
+        setError(null);
+        // Refresh inventory after successful download
+        await fetchInventory();
+      } else {
+        setError('Failed to download Kaggle dataset: ' + response.data.error);
+      }
+    } catch (err) {
+      setError('Failed to download Kaggle dataset. Please try again.');
+      console.error('Error downloading Kaggle data:', err);
+    } finally {
+      setKaggleLoading(false);
+    }
+  };
+
+  const loadKaggleData = async () => {
+    try {
+      setKaggleLoading(true);
+      const response = await axios.post('http://localhost:8080/api/inventory/load-kaggle-data');
+      if (response.data.success) {
+        setError(null);
+        // Refresh inventory after successful load
+        await fetchInventory();
+      } else {
+        setError('Failed to load Kaggle data: ' + response.data.error);
+      }
+    } catch (err) {
+      setError('Failed to load Kaggle data. Please try again.');
+      console.error('Error loading Kaggle data:', err);
+    } finally {
+      setKaggleLoading(false);
     }
   };
 
@@ -157,8 +196,46 @@ const Dashboard: React.FC = () => {
             Supply Chain Dashboard
           </h1>
           <p className="text-gray-600">
-            Monitor inventory levels and run demand predictions
+            Real-time inventory and supply chain management
           </p>
+        </div>
+
+        {/* Kaggle Dataset Integration */}
+        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-md">
+          <h3 className="text-lg font-semibold text-blue-900 mb-2">Kaggle Dataset Integration</h3>
+          <div className="flex flex-wrap gap-4">
+            <button
+              onClick={downloadKaggleData}
+              disabled={kaggleLoading}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              {kaggleLoading ? (
+                <span className="flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Downloading...
+                </span>
+              ) : (
+                'Download Kaggle Dataset'
+              )}
+            </button>
+            <button
+              onClick={loadKaggleData}
+              disabled={kaggleLoading}
+              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              {kaggleLoading ? (
+                <span className="flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Loading...
+                </span>
+              ) : (
+                'Load Kaggle Data'
+              )}
+            </button>
+            <span className="text-sm text-blue-700">
+              Downloads real retail inventory data from Kaggle
+            </span>
+          </div>
         </div>
 
         {/* Search and Filters */}

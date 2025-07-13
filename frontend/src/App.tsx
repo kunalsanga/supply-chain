@@ -4,11 +4,26 @@ import './App.css';
 
 interface InventoryEvent {
   id: number;
-  eventType: string;
+  date: string;
+  storeId: string;
+  productId: string;
   productName: string;
+  category: string;
+  supplier: string;
   quantity: number;
-  timestamp: string;
+  status: string;
   location: string;
+  timestamp: string;
+  inventoryLevel: number;
+  unitsSold: number;
+  unitsOrdered: number;
+  demandForecast: number;
+  price: number;
+  discount: number;
+  weatherCondition: string;
+  holidayOrPromotion: string;
+  competitorPricing: number;
+  seasonality: string;
 }
 
 function App() {
@@ -18,6 +33,7 @@ function App() {
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const [kaggleStatus, setKaggleStatus] = useState<string | null>(null);
   const [downloadingKaggle, setDownloadingKaggle] = useState(false);
+  const [loadingKaggle, setLoadingKaggle] = useState(false);
 
   const fetchInventoryEvents = async () => {
     setLoading(true);
@@ -83,6 +99,30 @@ function App() {
     }
   };
 
+  const loadKaggleData = async () => {
+    setLoadingKaggle(true);
+    setKaggleStatus('Loading Kaggle data into database...');
+    
+    try {
+      const response = await axios.post('http://localhost:8080/api/inventory/load-kaggle-data');
+      if (response.data.success) {
+        setKaggleStatus('✅ Kaggle data loaded into database successfully!');
+        // Refresh inventory events after load
+        setTimeout(() => {
+          fetchInventoryEvents();
+          setKaggleStatus(null);
+        }, 2000);
+      } else {
+        setKaggleStatus('❌ Failed to load Kaggle data: ' + response.data.error);
+      }
+    } catch (err) {
+      setKaggleStatus('❌ Error loading Kaggle data. Please try again.');
+      console.error('Kaggle load error:', err);
+    } finally {
+      setLoadingKaggle(false);
+    }
+  };
+
   useEffect(() => {
     fetchInventoryEvents();
   }, []);
@@ -98,7 +138,7 @@ function App() {
         {/* Kaggle Dataset Section */}
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
           <h2 className="text-2xl font-semibold text-gray-800 mb-4">Kaggle Dataset Integration</h2>
-          <div className="flex items-center space-x-4 mb-4">
+          <div className="flex flex-wrap items-center gap-4 mb-4">
             <button 
               onClick={downloadKaggleDataset}
               disabled={downloadingKaggle}
@@ -109,6 +149,17 @@ function App() {
               }`}
             >
               {downloadingKaggle ? 'Downloading...' : 'Download Kaggle Dataset'}
+            </button>
+            <button 
+              onClick={loadKaggleData}
+              disabled={loadingKaggle}
+              className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+                loadingKaggle 
+                  ? 'bg-gray-400 cursor-not-allowed' 
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }`}
+            >
+              {loadingKaggle ? 'Loading...' : 'Load Kaggle Data'}
             </button>
             <div className="text-sm text-gray-600">
               Downloads real retail inventory data from Kaggle
@@ -134,7 +185,7 @@ function App() {
               className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
             />
             <div className="text-sm text-gray-600">
-              Upload a CSV file with columns: eventType, productName, quantity, timestamp, location
+              Upload a CSV file with inventory data
             </div>
           </div>
           {uploadStatus && (
@@ -176,17 +227,18 @@ function App() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Event Type</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Store</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Inventory Level</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {inventoryEvents.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
+                      <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
                         No inventory events found. Upload a CSV file or download Kaggle dataset to see data.
                       </td>
                     </tr>
@@ -194,17 +246,12 @@ function App() {
                     inventoryEvents.map((event) => (
                       <tr key={event.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{event.id}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            event.eventType === 'IN' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                          }`}>
-                            {event.eventType}
-                          </span>
-                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{event.productName}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{event.quantity}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{event.storeId}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{event.category}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{event.inventoryLevel}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{event.location}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{event.timestamp}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{event.date}</td>
                       </tr>
                     ))
                   )}

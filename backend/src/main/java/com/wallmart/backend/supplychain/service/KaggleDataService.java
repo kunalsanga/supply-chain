@@ -13,6 +13,9 @@ import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -105,12 +108,12 @@ public class KaggleDataService {
     /**
      * Load the downloaded Kaggle data into the database
      */
-    private void loadKaggleDataIntoDatabase() {
+    public void loadKaggleDataIntoDatabase() {
         try {
             Path dataPath = Paths.get("kaggle_inventory_data.csv");
             if (Files.exists(dataPath)) {
                 logger.info("Loading Kaggle data into database...");
-                List<InventoryEvent> events = inventoryCSVParser.parseCSV(Files.newInputStream(dataPath));
+                List<InventoryEvent> events = convertKaggleDataToInventoryEvents(dataPath);
                 inventoryService.saveAll(events);
                 logger.info("Successfully loaded " + events.size() + " events from Kaggle data");
             } else {
@@ -119,6 +122,56 @@ public class KaggleDataService {
         } catch (Exception e) {
             logger.error("Error loading Kaggle data into database", e);
         }
+    }
+    
+    /**
+     * Convert Kaggle data format to InventoryEvent format
+     */
+    private List<InventoryEvent> convertKaggleDataToInventoryEvents(Path dataPath) throws IOException {
+        List<InventoryEvent> events = new ArrayList<>();
+        List<String> lines = Files.readAllLines(dataPath);
+        
+        // Skip header
+        for (int i = 1; i < lines.size(); i++) {
+            String line = lines.get(i);
+            String[] parts = line.split(",");
+            
+            if (parts.length >= 5) {
+                String eventType = parts[0];
+                String productName = parts[1];
+                int quantity = Integer.parseInt(parts[2]);
+                String timestamp = parts[3];
+                String location = parts[4];
+                
+                // Create InventoryEvent with converted data
+                InventoryEvent event = InventoryEvent.builder()
+                    .date(timestamp)
+                    .storeId("STORE_" + (i % 5 + 1)) // Generate store IDs
+                    .productId("PROD_" + (i - 1))
+                    .productName(productName)
+                    .category("General")
+                    .supplier("Supplier_" + (i % 3 + 1))
+                    .quantity(quantity)
+                    .status(eventType)
+                    .location(location)
+                    .timestamp(LocalDate.parse(timestamp).atStartOfDay())
+                    .inventoryLevel(quantity * 10) // Simulate inventory level
+                    .unitsSold(quantity * 2) // Simulate units sold
+                    .unitsOrdered(quantity * 3) // Simulate units ordered
+                    .demandForecast(quantity * 15.0) // Simulate demand forecast
+                    .price(29.99 + (i * 0.5)) // Simulate price
+                    .discount(0.0) // No discount
+                    .weatherCondition("Sunny")
+                    .holidayOrPromotion("None")
+                    .competitorPricing(25.0 + (i * 0.3)) // Simulate competitor pricing
+                    .seasonality("Summer")
+                    .build();
+                
+                events.add(event);
+            }
+        }
+        
+        return events;
     }
     
     /**
